@@ -11,11 +11,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -26,8 +28,10 @@ public class JwtUtil {
     private final String SECRET = "5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437";
 
     public String generateToken(String username) {
+        Users user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         Map<String,Object> claims = new HashMap<>();
+        claims.put("roles" , List.of(user.getUserRoles().name()));
         return Jwts.builder()
                 .claims()
                 .add(claims)
@@ -96,3 +100,11 @@ public class JwtUtil {
     }
 
 }
+
+
+
+
+
+
+
+

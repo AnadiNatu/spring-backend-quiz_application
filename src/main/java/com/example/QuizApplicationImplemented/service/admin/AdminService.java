@@ -1,6 +1,7 @@
 package com.example.QuizApplicationImplemented.service.admin;
 
 import com.example.QuizApplicationImplemented.dto.applicationDTO.*;
+import com.example.QuizApplicationImplemented.dto.authenticationDTO.UsersDto;
 import com.example.QuizApplicationImplemented.entity.Questions;
 import com.example.QuizApplicationImplemented.entity.Quiz;
 import com.example.QuizApplicationImplemented.entity.Responses;
@@ -19,6 +20,7 @@ import com.example.QuizApplicationImplemented.repository.QuizRepository;
 import com.example.QuizApplicationImplemented.repository.ResponseRepository;
 import com.example.QuizApplicationImplemented.repository.UserRepository;
 import com.example.QuizApplicationImplemented.security.JwtUtil;
+import jakarta.transaction.Transactional;
 import org.apache.catalina.User;
 import org.apache.coyote.Response;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,33 +68,39 @@ public class AdminService {
     }
 
 //    Getting the Creating Quiz (ADMIN OR CREATOR)
+    @Transactional
     public QuizDto createQuiz(CreateQuizDto dto){
-        Users users = jwtUtil.getLoggedInUser();
-        if (userRolesCheckForAdminAndCreator(users)){
-            try{
-                List<Questions> availableQuestions = questionRepository.findByCategoryAndDifficultyLevel(dto.getCategory(), dto.getDifficultyLevel());
+        Users creator = jwtUtil.getLoggedInUser();
+        if (creator == null) {
+            throw new RuntimeException("Unauthorized or expired token.");
+        }
 
-                if (availableQuestions == null || availableQuestions.isEmpty()) {
-                    throw new QuizProcessingErrorException("No questions found for category: " + dto.getCategory() + " and difficulty: " + dto.getDifficultyLevel());
-                }
+        Quiz quiz = new Quiz();
+        quiz.setTitle(dto.getQuizTitle());
+        quiz.setCategory(dto.getCategory());
+        quiz.setDifficultyLevel(dto.getDifficultyLevel());
+        quiz.setCreatedBy(creator);
 
-                if (availableQuestions.size() < dto.getNoOfQuestions()) {
-                    throw new QuizProcessingErrorException("Not enough questions available. Requested: " + dto.getNoOfQuestions() + ", Available: " + availableQuestions.size());
-                }
+        // Save Quiz to generate ID
+        quiz = quizRepository.saveAndFlush(quiz);
 
-                List<Questions> selectedQuestions = selectRandomQuestions(availableQuestions , dto.getNoOfQuestions());
+        List<Questions> availableQuestions = questionRepository.findByCategoryAndDifficultyLevel(
+                dto.getCategory(), dto.getDifficultyLevel());
 
-                Quiz quiz = mapper.toCreateQuiz(dto, users, selectedQuestions);
+        if (availableQuestions.size() < dto.getNoOfQuestions()) {
+            throw new IllegalArgumentException("Not enough questions available");
+        }
 
-                Quiz savedQuiz = quizRepository.save(quiz);
+        Collections.shuffle(availableQuestions);
+        List<Questions> selectedQuestions = availableQuestions.subList(0, dto.getNoOfQuestions());
 
-                return mapper.toQuizDto(savedQuiz);
+        // 🚨 Use only owning side
+        quiz.setQuestions(selectedQuestions);
 
-            }catch(QuizProcessingErrorException ex){
-                throw new QuizProcessingErrorException("Quiz Was Not Created");
-            }
-        }else
-            throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
+        // Save again with questions
+        quiz = quizRepository.saveAndFlush(quiz);
+
+        return mapper.toQuizDto(quiz);
     }
 
 //  Getting the Created Quiz (ADMIN OR CREATOR)
@@ -146,9 +154,18 @@ public CreatedQuizDto getCreatedQuiz(String quizTitle) {
             try{
                 Quiz quiz = quizRepository.findQuizByTitle(quizTitle).orElseThrow(() -> new QuizNotFoundException("Quiz With This Title Was Not Found"));
                 CreatorUserDto userDTO = new CreatorUserDto();
-                if (quiz.getCreatedBy().getName().equalsIgnoreCase(users.getName())){
-                    userDTO.setCreatorName(users.getName());
-                    userDTO.setUserRoles(UserRoles.CREATOR);
+                if (quiz.getCreatedBy().getUsername().equalsIgnoreCase(users.getUsername())){
+                    if (users.getName() != null) {
+                        userDTO.setCreatorName(users.getName());
+                    }else{
+                        userDTO.setCreatorName("Admin");
+                    }
+                    if (users.getUserRoles()==UserRoles.CREATOR) {
+                        userDTO.setUserRoles(UserRoles.CREATOR);
+                    }else{
+                        userDTO.setUserRoles(UserRoles.ADMIN);
+                    }
+
                     userDTO.setQuestionTitleList(getQuestionTitlesOfQuiz(quiz));
                 }
                 return userDTO;
@@ -164,10 +181,10 @@ public CreatedQuizDto getCreatedQuiz(String quizTitle) {
         Users users = jwtUtil.getLoggedInUser();
         if (userRolesCheckForAdminAndCreator(users)){
             try{
-                List<String> quizTitleList = getQuizTitlesByCreatorName(users.getName());
+                List<Long> quizIdList = getQuizIdsByCreatorName(users.getUsername());
                 List<QuizDto> quizDtoList = new ArrayList<>();
-                for (String quizTitle : quizTitleList){
-                    Quiz quiz = quizRepository.findQuizByTitle(quizTitle).orElseThrow(() -> new QuizNotFoundException("Quiz With This Title Was Not Found"));
+                for (Long quizId : quizIdList){
+                    Quiz quiz = quizRepository.findQuizById(quizId).orElseThrow(() -> new QuizNotFoundException("Quiz With This Title Was Not Found"));
                     quizDtoList.add(mapper.toQuizDto(quiz));
                 }
                 return quizDtoList;
@@ -175,6 +192,26 @@ public CreatedQuizDto getCreatedQuiz(String quizTitle) {
                 throw new QuizProcessingErrorException("Quiz  With The Given Title Was Not Processed");
             }
         }else
+            throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
+    }
+
+//      Getting all quiz (ADMIN & CREATOR)
+    public List<QuizDto> getAllQuiz(){
+        Users users = jwtUtil.getLoggedInUser();
+        if (userRolesCheckForAdminAndCreator(users)) {
+            try {
+                List<Quiz> quizList = quizRepository.findAll();
+                List<QuizDto> quizDtoList = new ArrayList<>();
+                for (Quiz quiz : quizList) {
+                    quizDtoList.add(mapper.toQuizDto(quiz));
+                }
+
+                return quizDtoList;
+            }catch (QuizProcessingErrorException ex){
+                throw new QuizProcessingErrorException("Quiz were not collected");
+            }
+        }
+        else
             throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
     }
 
@@ -190,24 +227,25 @@ public CreatedQuizDto getCreatedQuiz(String quizTitle) {
                     wrapper.add(mapper.toQuestionWrapper(quizQuestion));
                 }
 
-
 //                Adding the participant to quiz
-                List<Users> currentParticipants = quiz.getParticipants();
-                if (currentParticipants == null){
-                    currentParticipants = new ArrayList<>();
-                    quiz.setParticipants(currentParticipants);
-                }
+//                List<Users> currentParticipants = quiz.getParticipants();
+//                if (currentParticipants == null){
+//                    currentParticipants = new ArrayList<>();
+//                    quiz.setParticipants(currentParticipants);
+//                }
 
-                boolean userAlreadyParticipated = currentParticipants.stream()
+                boolean userAlreadyParticipated = quiz.getParticipants().stream()
                         .anyMatch(participants -> participants != null && participants.getId() != null && participants.getId().equals(users.getId()));
                 if (userAlreadyParticipated){
                     throw new QuizProcessingErrorException("User has already taken the quiz");
                 }
 
-                currentParticipants.add(users);
-                quiz.setParticipants(currentParticipants);
+//                currentParticipants.add(users);
+//                quiz.setParticipants(currentParticipants);
+                quiz.addParticipant(users);
+                quizRepository.saveAndFlush(quiz);
 
-                quizRepository.save(quiz);
+//                quizRepository.save(quiz);
                 return wrapper;
             }catch(QuizProcessingErrorException ex){
                 throw new QuizProcessingErrorException("Quiz  With The Given Title Was Not Processed");
@@ -218,53 +256,53 @@ public CreatedQuizDto getCreatedQuiz(String quizTitle) {
 
 
 //    Getting the response from the user after taking quiz and storing it (ADMIN or PARTICIPANT)
-    public List<ResponseEvaluationDto> savingResponseResponse(QuizTakenResponse response){
-      Users user = jwtUtil.getLoggedInUser();
-      if (!userRolesCheckForAdminAndParticipant(user)){
-          throw new UserRoleIncorrectException("User is not authorized to do this");
-      }
-
-      try{
-          Quiz quiz = quizRepository.findQuizByTitle(response.getQuizTitle()).orElseThrow(() -> new QuizNotFoundException("Quiz with this title was not found"));
-
-          boolean userIsParticipant = quiz.getParticipants().stream().anyMatch(p -> p != null && p.getId().equals(user.getId()));
-          if (!userIsParticipant){
-              throw new ResponseNotReceivedException("User is not a participant of the quiz");
-          }
-
-          Responses responses = mapper.toResponseEntity(response , quiz , user);
-          responseRepository.save(responses);
-
-          Map<Long , String> correctAnswers = getRightAnswerByQuizTitle(response.getQuizTitle());
-          Map<Long , String> userAnswer = getSelectedAnswerByUserAndQuizTitle(user.getName(), response.getQuizTitle());
-          Map<Long , String> questionTitles = quiz.getQuestions().stream()
-                  .collect(Collectors.toMap(Questions::getId , Questions::getQuestionTitle));
-
-          List<ResponseEvaluationDto> evaluationList = new ArrayList<>();
-
-          for (Map.Entry<Long , String> entry : userAnswer.entrySet()){
-              Long qId = entry.getKey();
-              String participantAnswer = entry.getValue();
-              String correctAnswer = correctAnswers.get(qId);
-              String questionTitle = questionTitles.get(qId);
-
-              ResponseEvaluationDto dto = new ResponseEvaluationDto();
-              dto.setQuestionTitle(questionTitle);
-              dto.setCorrectAnswer(correctAnswer);
-              dto.setParticipantAnswer(participantAnswer);
-              evaluationList.add(dto);
-          }
-
-          return evaluationList;
-
-      }catch (QuizNotFoundException | ResponseNotReceivedException ex){
-          throw ex;
-      }catch (Exception ex){
-          throw new RuntimeException("Error while saving and evaluating quiz response " , ex);
-      }
+public List<ResponseEvaluationDto> savingResponseResponse(QuizTakenResponse response){
+    Users user = jwtUtil.getLoggedInUser();
+    if (!userRolesCheckForAdminAndParticipant(user)){
+        throw new UserRoleIncorrectException("User is not authorized to do this");
     }
 
-//  Getting all the quiz a Participant Has Taken (ADMIN or CREATOR)
+    try{
+        Quiz quiz = quizRepository.findQuizByTitle(response.getQuizTitle()).orElseThrow(() -> new QuizNotFoundException("Quiz with this title was not found"));
+
+        boolean userIsParticipant = quiz.getParticipants().stream().anyMatch(p -> p != null && p.getId().equals(user.getId()));
+        if (!userIsParticipant){
+            throw new ResponseNotReceivedException("User is not a participant of the quiz");
+        }
+
+        Responses responses = mapper.toResponseEntity(response , quiz , user);
+        responseRepository.save(responses);
+
+        Map<Long , String> correctAnswers = getRightAnswerByQuizTitle(response.getQuizTitle());
+        Map<Long , String> userAnswer = getSelectedAnswerByUserAndQuizTitle(user.getUsername(), response.getQuizTitle());
+        Map<Long , String> questionTitles = quiz.getQuestions().stream()
+                .collect(Collectors.toMap(Questions::getId , Questions::getQuestionTitle));
+
+        List<ResponseEvaluationDto> evaluationList = new ArrayList<>();
+
+        for (Map.Entry<Long , String> entry : userAnswer.entrySet()){
+            Long qId = entry.getKey();
+            String participantAnswer = entry.getValue();
+            String correctAnswer = correctAnswers.get(qId);
+            String questionTitle = questionTitles.get(qId);
+
+            ResponseEvaluationDto dto = new ResponseEvaluationDto();
+            dto.setQuestionTitle(questionTitle);
+            dto.setCorrectAnswer(correctAnswer);
+            dto.setParticipantAnswer(participantAnswer);
+            evaluationList.add(dto);
+        }
+
+        return evaluationList;
+
+    }catch (QuizNotFoundException | ResponseNotReceivedException ex){
+        throw ex;
+    }catch (Exception ex){
+        throw new RuntimeException("Error while saving and evaluating quiz response " , ex);
+    }
+}
+
+    //  Getting all the quiz a Participant Has Taken (ADMIN or CREATOR)
     public List<String> getAllTheQuizForParticipant(){
         Users users = jwtUtil.getLoggedInUser();
         if (!userRolesCheckForAdminAndCreator(users)){
@@ -298,7 +336,7 @@ public CreatedQuizDto getCreatedQuiz(String quizTitle) {
             throw new RuntimeException("User did not participate in this quiz");
         }
 
-        Map<String , Integer> evaluation = evaluateUserAnswers(quizTitle , user.getName());
+        Map<String , Integer> evaluation = evaluateUserAnswers(quizTitle , user.getUsername());
 
         int correct = evaluation.getOrDefault("correct" , 0);
         int wrong = evaluation.getOrDefault("wrong" , 0);
@@ -378,6 +416,43 @@ public CreatedQuizDto getCreatedQuiz(String quizTitle) {
             return resultList;
     }
 
+// Frontend Helper Function
+    public QuizDto getQuizByQuizTitle(String quizTitle){
+        Quiz quiz = quizRepository.findQuizByTitle(quizTitle).orElseThrow(() -> new RuntimeException("Quiz with title " +quizTitle+ "was not found"));
+
+        return mapper.toQuizDto(quiz);
+    }
+
+    public List<String> getAllQuizTitles(){
+        List<String> quizTitles = quizRepository.findAll().stream().map(Quiz::getTitle).toList();
+
+        return quizTitles;
+    }
+
+
+    public int getQuestionCountByCategory(String category){
+        List<Questions> questions = questionRepository.findByCategory(category);
+        return questions.size();
+    }
+
+    public int getQuestionByCategoryAndDifficulty(String category , String difficultyLevel){
+        return questionRepository.countByCategoryAndDifficulty(category, difficultyLevel);
+    }
+
+    public List<String> getAllCategories(){
+        List<Questions> allQuestions = questionRepository.findAll();
+        return allQuestions.stream()
+                .map(Questions::getCategory)
+                .filter(category -> category != null && !category.trim().isEmpty())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    public UsersDto getUserDetails(){
+        return mapper.mapFromUserToUserDTO(jwtUtil.getLoggedInUser());
+    }
+
 //    Helper Functions
 
     public List<Questions> selectRandomQuestions(List<Questions> availableQuestions, int noOfQuestions) {
@@ -412,10 +487,10 @@ public CreatedQuizDto getCreatedQuiz(String quizTitle) {
                 .collect(Collectors.toList());
     }
 
-    public List<String> getQuizTitlesByCreatorName(String creatorName){
+    public List<Long> getQuizIdsByCreatorName(String creatorName){
         List<Quiz> quizzes = quizRepository.findAllQuizCreatedByUser(creatorName);
 
-        return quizzes.stream().map(Quiz :: getTitle).collect(Collectors.toList());
+        return quizzes.stream().map(Quiz :: getId).collect(Collectors.toList());
     }
 
     public List<String> getParticipantNameByQuizTitle(String quizTitle){

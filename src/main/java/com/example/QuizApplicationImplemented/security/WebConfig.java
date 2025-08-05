@@ -22,6 +22,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -61,12 +62,13 @@ public class WebConfig {
 
         corsConfiguration.setAllowedOrigins(Arrays.asList("http://localhost:4200"));
         corsConfiguration.setAllowedMethods(Arrays.asList("GET","POST" ,"PUT" , "DELETE" , "OPTION"));
-        corsConfiguration.setAllowedHeaders(Arrays.asList("Authorization" , "Content-Type"));
+//        corsConfiguration.setAllowedHeaders(Arrays.asList("Authorization" , "Content-Type"));
+        corsConfiguration.setAllowedHeaders(List.of("*"));
         corsConfiguration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**" , corsConfiguration);
-
+//        source.registerCorsConfiguration("/api/**" , corsConfiguration);
+        source.registerCorsConfiguration("/**" , corsConfiguration);
         return source;
     }
 

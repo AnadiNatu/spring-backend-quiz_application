@@ -24,4 +24,7 @@ public interface UserRepository extends JpaRepository<Users, Long> {
 
     Optional<Users> findByUserRoles(UserRoles userRoles);
 
+    @Query("SELECT u FROM Users u WHERE u.userRoles = :userRoles AND u.username = :username")
+    Optional<Users> findAdminsByRoleAndUsername(@Param("userRoles") UserRoles userRoles , @Param("username") String username);
+
 }

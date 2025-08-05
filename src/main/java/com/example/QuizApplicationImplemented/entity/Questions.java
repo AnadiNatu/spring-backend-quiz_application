@@ -1,11 +1,14 @@
 package com.example.QuizApplicationImplemented.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
+
 
 @Entity
 @Data
@@ -28,8 +31,9 @@ public class Questions {
     private String option3;
     private String option4;
 
-    @ManyToMany(mappedBy = "questions")
-    private List<Quiz> quizzes;
+    @ManyToMany(mappedBy = "questions" , fetch = FetchType.LAZY)
+    @JsonIgnore
+    private List<Quiz> quizzes = new ArrayList<>();
 
     @Override
     public String toString() {
