@@ -1,6 +1,7 @@
 package com.example.QuizApplicationImplemented.controller.admin;
 
 import com.example.QuizApplicationImplemented.dto.applicationDTO.*;
+import com.example.QuizApplicationImplemented.dto.authenticationDTO.UsersDto;
 import com.example.QuizApplicationImplemented.exceptions.QuestionException.QuestionCreationException;
 import com.example.QuizApplicationImplemented.exceptions.QuestionNotCreatedException;
 import com.example.QuizApplicationImplemented.exceptions.QuizExcetion.QuizNotFoundException;
@@ -83,6 +84,18 @@ public class AdminController {
         }
     }
 
+    @GetMapping("quiz/all")
+    public ResponseEntity<List<QuizDto>> getAllQuiz(){
+        try{
+            List<QuizDto> quizzes = adminService.getAllQuiz();
+            return ResponseEntity.ok(quizzes);
+        } catch (QuizProcessingErrorException | QuizNotFoundException ex){
+            return ResponseEntity.badRequest().build();
+        }catch (UserRoleIncorrectException ex){
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
     @GetMapping("participant/{quizTitle}")
     public ResponseEntity<List<QuestionWrapper>> getQuizForParticipant(@PathVariable String quizTitle) {
         try {
@@ -141,8 +154,54 @@ public class AdminController {
         }
     }
 
+    @GetMapping("getQuiz/{title}")
+    public ResponseEntity<QuizDto> getQuizByQuizTitle(@PathVariable(name = "title") String title){
+        return ResponseEntity.ok(adminService.getQuizByQuizTitle(title));
+    }
+
+    @GetMapping("getQuizTitles")
+    public ResponseEntity<List<String>> getAllQuizTitles(){
+        return ResponseEntity.ok(adminService.getAllQuizTitles());
+    }
+
     @GetMapping("getTakenQuiz")
     public ResponseEntity<List<String>> getAllTakenQuizTitles(){
         return ResponseEntity.ok(adminService.getAllTheQuizForParticipant());
     }
+
+    @GetMapping("count/category/{category}")
+    public ResponseEntity<Integer> getQuestionCountByCategory(@PathVariable String category){
+        try{
+            int count = adminService.getQuestionCountByCategory(category);
+            return ResponseEntity.ok(count);
+        }catch(Exception ex){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("count/category/{category}/difficulty/{difficultyLevel}")
+    public ResponseEntity<Integer> getQuestionCountByCategoryAndDifficulty(@PathVariable String category , @PathVariable String difficultyLevel){
+        try{
+            int count = adminService.getQuestionByCategoryAndDifficulty(category, difficultyLevel);
+            return ResponseEntity.ok(count);
+        }catch (Exception ex){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("categories")
+    public ResponseEntity<List<String>> getAllCategories(){
+        try{
+            List<String> categories = adminService.getAllCategories();
+            return ResponseEntity.ok(categories);
+        }catch (Exception ex){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("user")
+    public ResponseEntity<UsersDto> getUserDetails(){
+        return ResponseEntity.ok(adminService.getUserDetails());
+    }
+
 }

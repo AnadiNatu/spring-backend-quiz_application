@@ -20,9 +20,7 @@ public interface ResponseRepository extends JpaRepository<Responses, Long> {
     @Query("SELECT r FROM Responses r JOIN r.quiz q WHERE q.id = :quizId")
     List<Responses> findByQuizId(@Param("quizId") Long quizId);
 
-
-
-    @Query("SELECT r FROM Responses r JOIN r.user u JOIN r.quiz q WHERE LOWER(u.name)=LOWER(:name) AND LOWER(q.title) LIKE LOWER(:title)")
-    List<Responses> findResponseByUserAndQuizTitle(@Param("name")String userName , @Param("title")String quizTitle);
+    @Query("SELECT r FROM Responses r JOIN r.user u JOIN r.quiz q WHERE LOWER(u.username)=LOWER(:username) AND LOWER(q.title) LIKE LOWER(:title)")
+    List<Responses> findResponseByUserAndQuizTitle(@Param("username")String userName , @Param("title")String quizTitle);
 
 }

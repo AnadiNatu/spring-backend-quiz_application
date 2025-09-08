@@ -52,17 +52,26 @@ public class Mapper {
     }
 
     public Quiz toCreateQuiz(CreateQuizDto quizDto , Users creator , List<Questions> selectedQuestions){
-// Using JWTUTil "loggedInUser" method to get the user , role check it and send it to this function
 
         Quiz quiz = new Quiz();
         quiz.setTitle(quizDto.getQuizTitle());
         quiz.setCategory(quizDto.getCategory());
         quiz.setDifficultyLevel(quizDto.getDifficultyLevel());
         quiz.setCreatedBy(creator);
-        quiz.setQuestions(selectedQuestions);
         quiz.setParticipants(new ArrayList<>());
+        quiz.setQuestions(selectedQuestions);
+        for (Questions q : selectedQuestions) {
+            System.out.println("Selected Question: ID=" + q.getId());
+        }
 
         return quiz;
+    }
+
+//        for (Questions q : selectedQuestions){
+//            if (q.getQuizzes() == null) q.setQuizzes(new ArrayList<>());
+//            q.getQuizzes().add(quiz);
+//        }
+
 
         // Service Function Code
 //        List<Questions> selectedQuestions = questionRepository
@@ -72,7 +81,6 @@ public class Mapper {
 //
 //Quiz quizEntity = quizMapper.toCreateQuiz(quizDto, creator, selectedQuestions);
 //quizRepository.save(quizEntity);
-    }
 
     public CreatedQuizDto toCreatedQuizDto(Quiz quiz , List<Questions> questionsList){
         CreatedQuizDto quizDto = new CreatedQuizDto();
@@ -95,11 +103,11 @@ public class Mapper {
 
         QuestionWrapper questionWrapper = new QuestionWrapper();
 
-        questionWrapper.setQuestionTitle(questionWrapper.getQuestionTitle());
-        questionWrapper.setOption1(questionWrapper.getOption1());
-        questionWrapper.setOption2(questionWrapper.getOption2());
-        questionWrapper.setOption2(questionWrapper.getOption2());
-        questionWrapper.setOption2(questionWrapper.getOption2());
+        questionWrapper.setQuestionTitle(questions.getQuestionTitle());
+        questionWrapper.setOption1(questions.getOption1());
+        questionWrapper.setOption2(questions.getOption2());
+        questionWrapper.setOption3(questions.getOption3());
+        questionWrapper.setOption4(questions.getOption4());
 
         return questionWrapper;
 
@@ -121,7 +129,7 @@ public class Mapper {
                 questionDto.setOption1(questions.getOption1());
                 questionDto.setOption2(questions.getOption2());
                 questionDto.setOption3(questions.getOption3());
-                questionDto.setOption3(questions.getOption3());
+                questionDto.setOption4(questions.getOption4());
                 questionDto.setQuizId(quizId);
 
                 return questionDto;
@@ -135,28 +143,30 @@ public class Mapper {
         dto.setCategory(quiz.getCategory());
         dto.setDifficultyLevel(quiz.getDifficultyLevel());
 
-        if (quiz.getCreatedBy() != null){
+        if (quiz.getCreatedBy() != null) {
             dto.setCreatorUserId(quiz.getCreatedBy().getId());
             dto.setCreatorUserName(quiz.getCreatedBy().getName());
-        }else{
-            dto.setCreatorUserId(null);
-            dto.setCreatorUserName(null);
         }
 
-        List<Long> questionIds = new ArrayList<>();
-        if (quiz.getQuestions() != null){
-            questionIds = quiz.getQuestions().stream().map(Questions::getId).collect(Collectors.toList());
+        if (quiz.getQuestions() != null) {
+            List<Long> questionIds = quiz.getQuestions()
+                    .stream()
+                    .map(Questions::getId)
+                    .collect(Collectors.toList());
+            dto.setQuestionsQuizIds(questionIds);
+        } else {
+            dto.setQuestionsQuizIds(Collections.emptyList());
         }
-        dto.setQuestionsQuizIds(questionIds);
 
-        List<String> participantNames = new ArrayList<>();
-        if (quiz.getParticipants() == null){
+        if (quiz.getParticipants() != null) {
+            List<String> participantNames = quiz.getParticipants()
+                    .stream()
+                    .map(Users::getName)
+                    .collect(Collectors.toList());
             dto.setParticipantUserName(participantNames);
-        }else {
-            participantNames = quiz.getParticipants().stream().map(Users::getName).collect(Collectors.toList());
-            dto.setParticipantUserName(participantNames);
+        } else {
+            dto.setParticipantUserName(Collections.emptyList());
         }
-
         return dto;
     }
 

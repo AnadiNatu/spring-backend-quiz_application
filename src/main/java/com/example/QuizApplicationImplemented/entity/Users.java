@@ -1,6 +1,7 @@
 package com.example.QuizApplicationImplemented.entity;
 
 import com.example.QuizApplicationImplemented.enums.UserRoles;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -30,15 +31,18 @@ public class Users implements UserDetails {
 
     private String resetToken;
 
+//    @Lob
     private byte[] profilePhoto;
 
     @Enumerated(EnumType.STRING)
     private UserRoles userRoles;
 
     @OneToMany(mappedBy = "createdBy", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<Quiz> quizzes;
 
-    @ManyToMany(mappedBy = "participants")
+    @ManyToMany(mappedBy = "participants" , fetch = FetchType.LAZY)
+    @JsonIgnore
     private List<Quiz> quizzesTaken;
 
     @Override

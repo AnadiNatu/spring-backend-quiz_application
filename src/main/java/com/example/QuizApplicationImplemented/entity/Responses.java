@@ -1,5 +1,6 @@
 package com.example.QuizApplicationImplemented.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -19,11 +20,13 @@ public class Responses {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id" , nullable = false)
+    @JsonIgnore
     private Users user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "quiz_id")
+    @JoinColumn(name = "quiz_id" , nullable = false)
+    @JsonIgnore
     private Quiz quiz;
 
     @ElementCollection

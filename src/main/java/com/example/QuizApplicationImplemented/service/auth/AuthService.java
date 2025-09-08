@@ -11,6 +11,7 @@ import com.example.QuizApplicationImplemented.security.CusUserDetailService;
 import com.example.QuizApplicationImplemented.security.JwtUtil;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -18,7 +19,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -38,28 +43,74 @@ public class AuthService {
     @Autowired
     private Mapper mapper;
 
+    @Value("${file.user-upload-dir}")
+    private String uploadDir;
+
     @PostConstruct
     public void createAdmin(){
 
-        Optional<Users> optionalUsers = userRepository.findByUserRoles(UserRoles.ADMIN);
+        Optional<Users> optionalUsers = userRepository.findAdminsByRoleAndUsername(UserRoles.ADMIN , "admin@test.com");
 
-        if (optionalUsers.isEmpty()){
+        if (optionalUsers.isEmpty()) {
 
             Users users = new Users();
             users.setUsername("admin@test.com");
             users.setPassword(new BCryptPasswordEncoder().encode("admin"));
             users.setUserRoles(UserRoles.ADMIN);
             users.setAge(100);
+            users.setProfilePhoto(null);
 
             userRepository.save(users);
 
             System.out.println("Admin is created successfully");
-        }
-        else {
+        }else {
             System.out.println("Admin already created");
         }
     }
 
+    @PostConstruct
+    public void createAdmin1(){
+
+        Optional<Users> optionalUsers = userRepository.findAdminsByRoleAndUsername(UserRoles.ADMIN , "admin1@test.com");
+
+        if (optionalUsers.isEmpty()) {
+
+            Users users = new Users();
+            users.setUsername("admin1@test.com");
+            users.setPassword(new BCryptPasswordEncoder().encode("admin1"));
+            users.setUserRoles(UserRoles.ADMIN);
+            users.setAge(100);
+            users.setProfilePhoto(null);
+
+            userRepository.save(users);
+
+            System.out.println("Admin 1 is created successfully");
+        }else {
+            System.out.println("Admin 1 already created");
+        }
+    }
+
+    @PostConstruct
+    public void createAdmin2(){
+
+        Optional<Users> optionalUsers = userRepository.findAdminsByRoleAndUsername(UserRoles.ADMIN , "admin2@test.com");
+
+        if (optionalUsers.isEmpty()) {
+
+            Users users = new Users();
+            users.setUsername("admin2@test.com");
+            users.setPassword(new BCryptPasswordEncoder().encode("admin2"));
+            users.setUserRoles(UserRoles.ADMIN);
+            users.setAge(100);
+            users.setProfilePhoto(null);
+
+            userRepository.save(users);
+
+            System.out.println("Admin 2 is created successfully");
+        }else {
+            System.out.println("Admin 2 already created");
+        }
+    }
 
     public UsersDto signupUser(SignUpRequest signUpRequest){
 
@@ -79,6 +130,26 @@ public class AuthService {
 
         return mapper.mapFromUserToUserDTO(createdUser);
     }
+
+    public String updateProfilePicture(Long userId , MultipartFile file){
+        try{
+            Users users = userRepository.findById(userId).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+            String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
+            Path filePath = Paths.get(uploadDir , filename);
+
+            Files.createDirectories(filePath.getParent());
+            Files.write(filePath , file.getBytes());
+
+            users.setProfilePhoto(filename.getBytes());
+            userRepository.save(users);
+
+            return filename;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 
     public boolean hasUserWithEmail(String email){return userRepository.findByUsername(email).isPresent();}
 
