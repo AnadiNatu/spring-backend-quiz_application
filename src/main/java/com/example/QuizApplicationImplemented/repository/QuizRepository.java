@@ -19,10 +19,7 @@ public interface QuizRepository extends JpaRepository<Quiz, Long> {
 
     @Query("SELECT q FROM Quiz q JOIN q.participants p WHERE LOWER(p.name) = LOWER(:name)")
     List<Quiz> findQuizzesByParticipantName( @Param("name")String name);
-
-//    @Query("SELECT q FROM Quiz q JOIN q.createdBy u WHERE LOWER(u.name) = LOWER(:name)")
-//    List<Quiz> findQuizzesByCreatorName(@Param("name")String name);
-
+    
     @Query("SELECT q FROM Quiz q WHERE q.id = :quizId")
     Optional<Quiz> findQuizById(@Param("quizId") Long quizId);
 

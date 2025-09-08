@@ -31,7 +31,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class AdminService {
-
     @Autowired
     private UserRepository userRepository;
 

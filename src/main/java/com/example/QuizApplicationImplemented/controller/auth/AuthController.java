@@ -32,7 +32,6 @@ public class AuthController {
     @Autowired
     private UserRepository userRepository;
 
-
     @PostMapping("/signup")
     public ResponseEntity<?> signupUser(@RequestBody SignUpRequest request){
 
@@ -47,7 +46,6 @@ public class AuthController {
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(usersDto);
     }
-
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -125,6 +123,4 @@ public class AuthController {
         headers.setContentType(MediaType.IMAGE_JPEG); // adjust as needed
         return new ResponseEntity<>(imageData, headers, HttpStatus.OK);
     }
-
-
 }
