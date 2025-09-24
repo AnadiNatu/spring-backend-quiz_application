@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class QuestionWrapper {
 //  DTOs used while a participant is giving the test
+    private Long questionId;
     private String questionTitle;
     private String option1;
     private String option2;

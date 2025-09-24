@@ -41,7 +41,7 @@ public class AuthService {
     @Autowired
     private Mapper mapper;
 
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+//    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
 //    @PostConstruct
 //    public void createAdmin(){
@@ -151,7 +151,7 @@ public class AuthService {
     private final List<AdminConfig> adminConfigs = Arrays.asList(
             new AdminConfig("admin@test.com" , "admin"),
             new AdminConfig("admin1@test.com" , "admin1"),
-            new AdminConfig("admin1@test.com" , "admin1"),
+            new AdminConfig("admin1@test.com" , "admin1")
     );
 
     private static class AdminConfig{
@@ -167,13 +167,13 @@ public class AuthService {
     @PostConstruct
     public void createDefaultAdmins(){
         adminConfigs.forEach(config -> {
-            Optional<Users> existingAdmin = userRepository.findByUserRoles(UserRoles.ADMIN);
+            Optional<Users> existingAdmin = userRepository.findByUserRolesAndUsername(config.email,UserRoles.ADMIN);
 
             if (existingAdmin.isEmpty()){
                 Users admin = new Users();
                 admin.setUsername(config.email);
                 admin.setName("Administrator");
-                admin.setPassword(passwordEncoder.encode(config.password));
+                admin.setPassword(new BCryptPasswordEncoder().encode(config.password));
                 admin.setUserRoles(UserRoles.ADMIN);
                 admin.setAge(25);
 
@@ -197,7 +197,7 @@ public class AuthService {
         user.setName(signUpRequest.getName());
         user.setUsername(signUpRequest.getUsername().toLowerCase().trim());
         user.setAge(signUpRequest.getAge());
-        user.setPassword(passwordEncoder.encode(signUpRequest.getPassword()));
+        user.setPassword(new BCryptPasswordEncoder().encode(signUpRequest.getPassword()));
 
         // Set user role based on roleNumber
         switch (signUpRequest.getRoleNumber()) {
@@ -296,7 +296,7 @@ public class AuthService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         // Update password and clear reset token
-        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPassword(new BCryptPasswordEncoder().encode(newPassword));
         user.setResetToken(null); // Clear the token after use
         userRepository.save(user);
 

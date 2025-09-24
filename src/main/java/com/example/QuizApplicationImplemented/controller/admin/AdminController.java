@@ -99,7 +99,7 @@ public class AdminController {
     @PostMapping("responses/submit")
     public ResponseEntity<List<ResponseEvaluationDto>> submitQuizResponse(@RequestBody QuizTakenResponse response) {
         try {
-            List<ResponseEvaluationDto> evaluation = adminService.savingResponseResponse(response);
+            List<ResponseEvaluationDto> evaluation = adminService.savingResponse(response);
             return ResponseEntity.ok(evaluation);
         } catch (QuizNotFoundException ex) {
             return ResponseEntity.notFound().build();

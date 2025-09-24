@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -15,5 +16,9 @@ public class CreatedQuizDto {
     private String category;
     private String difficultyLevel;
     private String creatorName;
+    private Integer totalQuestions;
+    private Double averageScore;
+    private Double rating;
+    private LocalDateTime createdAt;
     private List<QuestionDto> questionList;
 }

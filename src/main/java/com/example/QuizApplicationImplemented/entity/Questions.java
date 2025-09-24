@@ -1,5 +1,6 @@
 package com.example.QuizApplicationImplemented.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -19,16 +20,32 @@ public class Questions {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false , length = 1000)
     private String questionTitle;
+
+    @Column(nullable = false , length = 1000)
     private String category;
+
+    @Column(nullable = false , length = 50)
     private String difficultyLevel;
+
+    @Column(nullable = false , length = 500)
     private String rightAnswer;
+
+    @Column(nullable = false , length = 500)
     private String option1;
+
+    @Column(nullable = false , length = 500)
     private String option2;
+
+    @Column(nullable = false , length = 500)
     private String option3;
+
+    @Column(nullable = false , length = 500)
     private String option4;
 
-    @ManyToMany(mappedBy = "questions")
+    @ManyToMany(mappedBy = "questions" , fetch = FetchType.LAZY)
+    @JsonIgnore
     private List<Quiz> quizzes;
 
     @Override

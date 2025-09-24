@@ -11,10 +11,10 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class ParticipantUserDto {
-    // This DTO is to transfer the list of quiz that a Participant has taken
-    private String participantName;
-    private UserRoles userRoles;
-    private List<String> quizTitleList;
-
-}
+//public class ParticipantUserDto {
+//    // This DTO is to transfer the list of quiz that a Participant has taken
+//    private String participantName;
+//    private UserRoles userRoles;
+//    private List<String> quizTitleList;
+//
+//}

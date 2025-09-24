@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class ResponseDto {
 // This marks the question and answer the quiz taker has selected
+    private Long questionId;
     private String questionTitle;
     private String selectedAnswer;
 }

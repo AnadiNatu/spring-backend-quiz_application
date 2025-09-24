@@ -16,7 +16,7 @@ public interface QuestionRepository extends JpaRepository<Questions, Long> {
     List<Questions> findByCategory(@Param("category") String category);
 
     @Query("SELECT q FROM Questions q WHERE LOWER(q.questionTitle) = LOWER(:questionTitle)")
-    Optional<Questions> findQuestionByQuestionTitle(@Param("questionTitle")String questionTitle);
+    Optional<Questions> findByQuestionTitle(@Param("questionTitle")String questionTitle);
 
     @Query("SELECT q FROM Questions q WHERE LOWER(q.difficultyLevel) = LOWER(:difficultyLevel)")
     List<Questions> findByDifficultyLevel(String difficultyLevel);
@@ -33,4 +33,9 @@ public interface QuestionRepository extends JpaRepository<Questions, Long> {
             @Param("difficultyLevel") String difficultyLevel
     );
 
+    @Query("SELECT DISTINCT q.category FROM Questions q ORDER BY q.category")
+    List<String> findAllCategories();
+
+    @Query("SELECT DISTINCT q.difficultyLevel FROM Questions ORDER BY q.difficultyLevel")
+    List<String> findAllDifficultyLevel();
 }

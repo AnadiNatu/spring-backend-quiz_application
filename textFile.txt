@@ -1,0 +1,1625 @@
+
+1.) ENTITIES
+-----> Quiz Entities
+@Entity
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Table(name = "quiz")
+public class Quiz {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String title;
+    private String category;
+    private String difficultyLevel;
+
+    // QUIZ CREATOR
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_user_id" , nullable = false)
+    private Users createdBy;
+
+    @ManyToMany(cascade = {CascadeType.MERGE , CascadeType.PERSIST}, fetch = FetchType.LAZY)
+    @JoinTable(name = "quiz_questions",
+            joinColumns = @JoinColumn(name = "quiz_id"),
+            inverseJoinColumns = @JoinColumn(name = "question_id"))
+    private List<Questions> questions = new ArrayList<>();
+
+    // THE LIST OF PARTICIPANTS
+    @ManyToMany(fetch = FetchType.LAZY , cascade = {CascadeType.MERGE , CascadeType.PERSIST})
+    @JoinTable(name = "quiz_users" ,
+            joinColumns = @JoinColumn(name = "quiz_id")
+            ,inverseJoinColumns = @JoinColumn(name = "user_id"))
+    private List<Users> participants = new ArrayList<>();
+
+    public void addQuestion(Questions question){
+        if (!questions.contains(question)) {
+            questions.add(question);
+        }
+        if (!question.getQuizzes().contains(this)) {
+            question.getQuizzes().add(this);
+        }
+    }
+
+    public void addParticipant(Users user) {
+        if (!participants.contains(user)) {
+            participants.add(user);
+        }
+    }
+
+    public void addQuestions(List<Questions> questions){
+        for (Questions q : questions){
+            addQuestion(q);
+        }
+    }
+    @Override
+    public String toString() {
+        return "Quiz{" +
+                "id=" + id +
+                ", title='" + title + '\'' +
+                ", category='" + category + '\'' +
+                ", difficultyLevel='" + difficultyLevel + '\'' +
+                '}';
+    }
+}
+
+-----> User Entities
+@Entity
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Table(name = "users")
+public class Users implements UserDetails {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+    private String username;
+    private String password;
+    private int age;
+
+    private String resetToken;
+
+//    @Lob
+    private byte[] profilePhoto;
+
+    @Enumerated(EnumType.STRING)
+    private UserRoles userRoles;
+
+    @OneToMany(mappedBy = "createdBy", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @JsonIgnore
+    private List<Quiz> quizzes;
+
+    @ManyToMany(mappedBy = "participants" , fetch = FetchType.LAZY)
+    @JsonIgnore
+    private List<Quiz> quizzesTaken;
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of(new SimpleGrantedAuthority(userRoles.name()));
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
+
+    @Override
+    public String toString() {
+        return "Users{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", username='" + username + '\'' +
+                ", password='" + password + '\'' +
+                ", age=" + age +
+                ", resetToken='" + resetToken + '\'' +
+                ", userRoles=" + userRoles +
+                '}';
+    }
+}
+
+
+2.) REPOSITORIES
+-----> User Repositories
+@Repository
+public interface UserRepository extends JpaRepository<Users, Long> {
+    @Query("SELECT u FROM Users u WHERE LOWER(u.username) = LOWER(:username)")
+    Optional<Users> findByUsername(@Param("username") String username);
+
+    @Query("SELECT u FROM Users u WHERE LOWER(u.name) LIKE LOWER(CONCAT('%' , :name , '%'))")
+    Optional<Users> findByName(@Param("name") String name);
+
+    @Query("SELECT u FROM Users u WHERE u.userRoles = :userRoles")
+    List<Users> findAllUserByRoles(@Param("userRoles") UserRoles userRoles);
+
+    Optional<Users> findByUserRoles(UserRoles userRoles);
+
+    @Query("SELECT u FROM Users u WHERE u.userRoles = :userRoles AND u.username = :username")
+    Optional<Users> findAdminsByRoleAndUsername(@Param("userRoles") UserRoles userRoles , @Param("username") String username);
+}
+
+-----> Quiz Repositories
+@Repository
+public interface QuizRepository extends JpaRepository<Quiz, Long> {
+    @Query("SELECT q FROM Quiz q JOIN q.questions qs WHERE qs.category = :category")
+    List<Quiz> findAllByCategory(@Param("category") String category);
+
+    @Query("SELECT q FROM Quiz q WHERE LOWER(q.title) = LOWER(:title)")
+    Optional<Quiz> findQuizByTitle(@Param("title") String title);
+
+    @Query("SELECT q FROM Quiz q JOIN q.participants p WHERE LOWER(p.name) = LOWER(:name)")
+    List<Quiz> findQuizzesByParticipantName( @Param("name")String name);
+    
+    @Query("SELECT q FROM Quiz q WHERE q.id = :quizId")
+    Optional<Quiz> findQuizById(@Param("quizId") Long quizId);
+
+    @Query("SELECT q FROM Quiz q JOIN q.createdBy u WHERE LOWER(u.username) = LOWER(:name)")
+    List<Quiz> findAllQuizCreatedByUser(@Param("name")String name);
+
+    @Query("SELECT q FROM Quiz q WHERE LOWER(q.category) = LOWER(:category) AND LOWER(q.difficultyLevel) = LOWER(:difficultyLevel)")
+    List<Quiz> findAllQuizByCategoryAndDifficulty(@Param("category")String category , @Param("difficultyLevel")String difficultyLevel);
+}
+
+
+3.) MAPPER
+@Component
+public class Mapper {
+
+    public UsersDto mapFromUserToUserDTO(Users users) {
+
+        UsersDto usersDto = new UsersDto();
+
+        usersDto.setId(users.getId());
+        usersDto.setName(users.getName());
+        usersDto.setUsername(users.getUsername());
+        usersDto.setPassword(users.getPassword());
+        usersDto.setAge(users.getAge());
+        usersDto.setUserRoles(users.getUserRoles());
+
+        return usersDto;
+    }
+
+    public Questions toCreateQuestionDto(CreateQuestionDto question){
+
+        Questions createdQuestion = new Questions();
+
+        createdQuestion.setQuestionTitle(question.getQuestionTitle());
+        createdQuestion.setCategory(question.getCategory());
+        createdQuestion.setDifficultyLevel(question.getDifficultyLevel());
+        createdQuestion.setRightAnswer(question.getRightAnswer());
+        createdQuestion.setOption1(question.getOption1());
+        createdQuestion.setOption2(question.getOption2());
+        createdQuestion.setOption3(question.getOption3());
+        createdQuestion.setOption4(question.getOption4());
+        createdQuestion.setQuizzes(new ArrayList<>());
+        
+        return createdQuestion;
+    }
+
+    public Quiz toCreateQuiz(CreateQuizDto quizDto , Users creator , List<Questions> selectedQuestions){
+
+        Quiz quiz = new Quiz();
+        quiz.setTitle(quizDto.getQuizTitle());
+        quiz.setCategory(quizDto.getCategory());
+        quiz.setDifficultyLevel(quizDto.getDifficultyLevel());
+        quiz.setCreatedBy(creator);
+        quiz.setParticipants(new ArrayList<>());
+        quiz.setQuestions(selectedQuestions);
+        for (Questions q : selectedQuestions) {
+            System.out.println("Selected Question: ID=" + q.getId());
+        }
+
+        return quiz;
+    }
+
+    public CreatedQuizDto toCreatedQuizDto(Quiz quiz , List<Questions> questionsList){
+        CreatedQuizDto quizDto = new CreatedQuizDto();
+        List<QuestionDto> questionDtoList = new ArrayList<>();
+
+        for (Questions question : questionsList){
+            questionDtoList.add(toQuestionDto(question));
+        }
+
+        quizDto.setTitle(quiz.getTitle());
+        quizDto.setCategory(quiz.getCategory());
+        quizDto.setDifficultyLevel(quiz.getDifficultyLevel());
+        quizDto.setCreatorName(quizDto.getCreatorName());
+        quizDto.setQuestionList(questionDtoList);
+
+        return quizDto;
+    }
+
+    public QuestionWrapper toQuestionWrapper(Questions questions){
+
+        QuestionWrapper questionWrapper = new QuestionWrapper();
+
+        questionWrapper.setQuestionTitle(questions.getQuestionTitle());
+        questionWrapper.setOption1(questions.getOption1());
+        questionWrapper.setOption2(questions.getOption2());
+        questionWrapper.setOption3(questions.getOption3());
+        questionWrapper.setOption4(questions.getOption4());
+
+        return questionWrapper;
+
+    }
+
+    public QuestionDto toQuestionDto(Questions questions){
+        List<Long> quizId = new ArrayList<>();
+        if (questions.getQuizzes() != null){
+            quizId = questions.getQuizzes().stream().map(Quiz::getId).collect(Collectors.toList());
+        }
+
+        QuestionDto questionDto = new QuestionDto();
+
+                questionDto.setId(questions.getId());
+                questionDto.setCategory(questions.getCategory());
+                questionDto.setDifficultyLevel(questions.getDifficultyLevel());
+                questionDto.setRightAnswer(questions.getRightAnswer());
+                questionDto.setQuestionTitle(questions.getQuestionTitle());
+                questionDto.setOption1(questions.getOption1());
+                questionDto.setOption2(questions.getOption2());
+                questionDto.setOption3(questions.getOption3());
+                questionDto.setOption4(questions.getOption4());
+                questionDto.setQuizId(quizId);
+
+                return questionDto;
+    }
+
+    public QuizDto toQuizDto(Quiz quiz){
+
+        QuizDto dto = new QuizDto();
+
+        dto.setTitle(quiz.getTitle());
+        dto.setCategory(quiz.getCategory());
+        dto.setDifficultyLevel(quiz.getDifficultyLevel());
+
+        if (quiz.getCreatedBy() != null) {
+            dto.setCreatorUserId(quiz.getCreatedBy().getId());
+            dto.setCreatorUserName(quiz.getCreatedBy().getName());
+        }
+
+        if (quiz.getQuestions() != null) {
+            List<Long> questionIds = quiz.getQuestions()
+                    .stream()
+                    .map(Questions::getId)
+                    .collect(Collectors.toList());
+            dto.setQuestionsQuizIds(questionIds);
+        } else {
+            dto.setQuestionsQuizIds(Collections.emptyList());
+        }
+
+        if (quiz.getParticipants() != null) {
+            List<String> participantNames = quiz.getParticipants()
+                    .stream()
+                    .map(Users::getName)
+                    .collect(Collectors.toList());
+            dto.setParticipantUserName(participantNames);
+        } else {
+            dto.setParticipantUserName(Collections.emptyList());
+        }
+        return dto;
+    }
+
+    public Quiz toQuizEntity(QuizDto dto, Users creator, List<Questions> questions, List<Users> participants) {
+        Quiz quiz = new Quiz();
+
+        quiz.setTitle(dto.getTitle());
+        quiz.setCategory(dto.getCategory());
+        quiz.setDifficultyLevel(dto.getDifficultyLevel());
+        quiz.setCreatedBy(creator);
+        quiz.setQuestions(questions != null ? questions : new ArrayList<>());
+        quiz.setParticipants(participants != null ? participants : new ArrayList<>());
+        return quiz;
+    }
+
+    public Responses toResponseEntity(QuizTakenResponse quizTakenResponse , Quiz quiz , Users users){
+        List<Questions> quizQuestions = quiz.getQuestions();
+        Map<String , Questions> questionTitleToEntityMap = quizQuestions
+                .stream()
+                .collect(Collectors.toMap(
+                        q -> q.getQuestionTitle().toLowerCase(),
+                        q -> q
+                ));
+
+        List<Long> questionIds = new ArrayList<>();
+        List<String> selectedAnswers = new ArrayList<>();
+
+        for (ResponseDto responseDto : quizTakenResponse.getResponseList()){
+            String questionTitle = responseDto.getQuestionTitle();
+            String selected = responseDto.getSelectedAnswer();
+
+            if (selected == null) continue;
+
+            Questions matchingQuestion = questionTitleToEntityMap.get(questionTitle.toLowerCase());
+            if (matchingQuestion != null){
+                questionIds.add(matchingQuestion.getId());
+                selectedAnswers.add(selected);
+            }
+        }
+        Responses response = new Responses();
+        response.setUser(users);
+        response.setQuiz(quiz);
+        response.setQuestionId(questionIds);
+        response.setSelectedAnswer(selectedAnswers);
+
+        return response;
+    }
+
+    public List<Long> getQuestionIdsOfQuiz(Quiz quiz) {
+        if (quiz.getQuestions() == null) return Collections.emptyList();
+
+        return quiz.getQuestions().stream()
+                .map(Questions::getId)
+                .collect(Collectors.toList());
+    }
+}
+
+
+4.) SECURITY
+-----> WebConfig
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class WebConfig {
+
+    @Autowired
+    private CusUserDetailService userDetailService;
+    @Autowired
+    private JwtAuthFilter authFilter;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+        return httpSecurity.csrf(customizer -> customizer.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .authorizeHttpRequests(request -> request.requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/admin/**").hasAnyAuthority(UserRoles.ADMIN.name())
+                .requestMatchers("/api/participant/**").hasAnyAuthority(UserRoles.PARTICIPANT.name())
+                        .anyRequest()
+                        .authenticated())
+                .sessionManagement(sessions -> sessions.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(authFilter , UsernamePasswordAuthenticationFilter.class)
+                .build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public UrlBasedCorsConfigurationSource corsConfigurationSource(){
+        CorsConfiguration corsConfiguration = new CorsConfiguration();
+
+        corsConfiguration.setAllowedOrigins(Arrays.asList("http://localhost:4200"));
+        corsConfiguration.setAllowedMethods(Arrays.asList("GET","POST" ,"PUT" , "DELETE" , "OPTION"));
+        corsConfiguration.setAllowedHeaders(List.of("*"));
+        corsConfiguration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**" , corsConfiguration);
+        return source;
+    }
+
+    @Bean
+    public AuthenticationProvider authenticationProvider(){
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+
+        provider.setPasswordEncoder(passwordEncoder());
+        provider.setUserDetailsService(userDetailService);
+
+        return provider;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
+        return configuration.getAuthenticationManager();
+    }
+}
+
+-----> JwtAuthFilter
+@Component
+public class JwtAuthFilter extends OncePerRequestFilter {
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private CusUserDetailService userDetailService;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+
+        String authHeader = request.getHeader("Authorization");
+        final String jwt;
+        final String username;
+
+        if (StringUtils.isEmpty(authHeader) || !StringUtils.startsWithIgnoreCase(authHeader,"Bearer ")){
+            filterChain.doFilter(request , response);
+            return;
+        }
+
+        jwt = authHeader.substring(7);
+        username = jwtUtil.extractUsername(jwt);
+
+        if ((!StringUtils.isEmpty(username)) && SecurityContextHolder.getContext().getAuthentication() == null){
+            UserDetails userDetails = userDetailService.loadUserByUsername(username);
+
+            if (jwtUtil.isTokenValid(jwt,userDetails)){
+                SecurityContext context = SecurityContextHolder.createEmptyContext();
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(userDetails , null , userDetails.getAuthorities());
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                context.setAuthentication(authToken);
+                SecurityContextHolder.setContext(context);
+            }
+        }
+
+        filterChain.doFilter(request,response);
+    }
+}
+
+-----> JwtUtil
+@Component
+public class JwtUtil {
+    @Autowired
+    private UserRepository userRepository;
+    private final String SECRET = "5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437";
+
+    public String generateToken(String username) {
+        Users user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        Map<String,Object> claims = new HashMap<>();
+        claims.put("roles" , List.of(user.getUserRoles().name()));
+        return Jwts.builder()
+                .claims()
+                .add(claims)
+                .subject(username)
+                .issuedAt(new Date(System.currentTimeMillis()))
+                .expiration(new Date(System.currentTimeMillis()+1000*30*60))
+                .and()
+                .signWith(getSigningKey())
+                .compact();
+    }
+
+    private SecretKey getSigningKey() {
+
+        byte[] keyBytes = Decoders.BASE64URL.decode(SECRET);  // this line of code converts the string into a string array for .hmacShaKeyFor() method
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+
+    public String extractUsername(String token) {
+        return extractClaim(token , Claims::getSubject);
+    }
+
+    public <T> T extractClaim(String token , Function<Claims,T> claimsResolver){
+
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    private Claims extractAllClaims(String token){
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    public boolean isTokenValid(String token, UserDetails userDetails) {
+        final String username = extractUsername(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+
+    private boolean isTokenExpired(String token){
+        return  extractExpiration(token).before(new Date());
+    }
+    private Date extractExpiration(String token){
+        return extractClaim(token , Claims::getExpiration);
+    }
+
+
+    public Users getLoggedInUser(){
+
+        Authentication authentcation = SecurityContextHolder.getContext().getAuthentication();
+        if (authentcation != null && authentcation.isAuthenticated()){
+            String username = authentcation.getName();
+            return userRepository.findByUsername(username).orElse(null);
+        }
+        return null;
+    }
+
+    public String getLoggedInUsername(){
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated() && !(authentication.getPrincipal() instanceof String)){
+            Users users = (Users) authentication.getPrincipal();
+        }
+        return null;
+    }
+}
+
+-----> AuthService
+@Service
+public class AuthService {
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private CusUserDetailService userService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private MailService mailService;
+
+    @Autowired
+    private Mapper mapper;
+
+    @Value("${file.user-upload-dir}")
+    private String uploadDir;
+
+    @PostConstruct
+    public void createAdmin(){
+
+        Optional<Users> optionalUsers = userRepository.findAdminsByRoleAndUsername(UserRoles.ADMIN , "admin@test.com");
+
+        if (optionalUsers.isEmpty()) {
+
+            Users users = new Users();
+            users.setUsername("admin@test.com");
+            users.setPassword(new BCryptPasswordEncoder().encode("admin"));
+            users.setUserRoles(UserRoles.ADMIN);
+            users.setAge(100);
+            users.setProfilePhoto(null);
+
+            userRepository.save(users);
+
+            System.out.println("Admin is created successfully");
+        }else {
+            System.out.println("Admin already created");
+        }
+    }
+
+    @PostConstruct
+    public void createAdmin1(){
+        Optional<Users> optionalUsers = userRepository.findAdminsByRoleAndUsername(UserRoles.ADMIN , "admin1@test.com");
+
+        if (optionalUsers.isEmpty()) {
+            Users users = new Users();
+            users.setUsername("admin1@test.com");
+            users.setPassword(new BCryptPasswordEncoder().encode("admin1"));
+            users.setUserRoles(UserRoles.ADMIN);
+            users.setAge(100);
+            users.setProfilePhoto(null);
+
+            userRepository.save(users);
+            System.out.println("Admin 1 is created successfully");
+        }else {
+            System.out.println("Admin 1 already created");
+        }
+    }
+
+    @PostConstruct
+    public void createAdmin2(){
+        Optional<Users> optionalUsers = userRepository.findAdminsByRoleAndUsername(UserRoles.ADMIN , "admin2@test.com");
+
+        if (optionalUsers.isEmpty()) {
+            Users users = new Users();
+            users.setUsername("admin2@test.com");
+            users.setPassword(new BCryptPasswordEncoder().encode("admin2"));
+            users.setUserRoles(UserRoles.ADMIN);
+            users.setAge(100);
+            users.setProfilePhoto(null);
+
+            userRepository.save(users);
+            System.out.println("Admin 2 is created successfully");
+        }else {
+            System.out.println("Admin 2 already created");
+        }
+    }
+
+    public UsersDto signupUser(SignUpRequest signUpRequest){
+        Users users = new Users();
+
+        users.setName(signUpRequest.getName());
+        users.setUsername(signUpRequest.getUsername());
+        users.setAge(signUpRequest.getAge());
+        users.setPassword(new BCryptPasswordEncoder().encode(signUpRequest.getPassword()));
+        if (signUpRequest.getRoleNumber()==1){
+            users.setUserRoles(UserRoles.CREATOR);
+        }else if (signUpRequest.getRoleNumber()==2){
+            users.setUserRoles(UserRoles.PARTICIPANT);
+        }
+        Users createdUser = userRepository.save(users);
+        return mapper.mapFromUserToUserDTO(createdUser);
+    }
+
+    public String updateProfilePicture(Long userId , MultipartFile file){
+        try{
+            Users users = userRepository.findById(userId).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+            String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
+            Path filePath = Paths.get(uploadDir , filename);
+
+            Files.createDirectories(filePath.getParent());
+            Files.write(filePath , file.getBytes());
+
+            users.setProfilePhoto(filename.getBytes());
+            userRepository.save(users);
+
+            return filename;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
+    public boolean hasUserWithEmail(String email){return userRepository.findByUsername(email).isPresent();}
+
+
+    public String sendResetToken(String email){
+        Users users = userRepository.findByUsername(email).orElseThrow(() -> new UsernameNotFoundException("User Not Found"));
+        String resetToken = jwtUtil.generateToken(email);
+
+        users.setResetToken(resetToken);
+        userRepository.save(users);
+
+        String resetLink = "http://localhost:4200/reset-password?token="+resetToken;
+        mailService.sendEmail(email , "Password Reset" , "Click the link to reset the password : " +  resetLink);
+
+        return resetToken;
+    }
+
+    public boolean validateResetToken(String token , String email){
+        String extractedEmail = jwtUtil.extractUsername(token);
+
+        if (!extractedEmail.equals(email)){
+            return false;
+        }
+
+        UserDetails userDetails = userService.loadUserByUsername(email);
+        return jwtUtil.isTokenValid(token,userDetails);
+    }
+
+    public String resetPassword(String email , String token , String newPassword){
+        if (!validateResetToken(token, email)){
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        Users users = userRepository.findByUsername(email).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        users.setPassword(new BCryptPasswordEncoder().encode(newPassword));
+        userRepository.save(users);
+
+        return "Password reset successfully";
+    }
+
+    public void uploadProfilePhoto(String userName, MultipartFile file) throws IOException {
+        Users user = userRepository.findByUsername(userName).orElseThrow(() -> new RuntimeException("User not found with Name: " + userName));
+
+        if (file != null && !file.isEmpty()){
+            user.setProfilePhoto(file.getBytes());
+            userRepository.save(user);
+        }else{
+            throw new RuntimeException("File is empty or null");
+        }
+    }
+
+    public byte[] getProfilePhoto(String userName){
+
+        Users user = userRepository.findByName(userName).orElseThrow(() -> new RuntimeException("User not found with Name: " + userName));
+
+        return user.getProfilePhoto();
+    }
+}
+
+-----> AuthController
+@RestController
+@RequestMapping("/api/auth")
+@CrossOrigin("*")
+public class AuthController {
+
+    @Autowired
+    private AuthService authService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> signupUser(@RequestBody SignUpRequest request){
+
+        if (authService.hasUserWithEmail(request.getUsername())){
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("User already exists with this email" + request);
+        }
+
+        UsersDto usersDto = authService.signupUser(request);
+
+        if (usersDto == null){
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("User not created");
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(usersDto);
+    }
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private CusUserDetailService userDetailService;
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @PostMapping("/login")
+    public ResponseEntity<LoginAuthResponse> login(@RequestBody LoginAuthRequest authRequest){
+        try{
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(authRequest.getUsername() , authRequest.getPassword()));
+        }catch (BadCredentialsException ex){
+            throw new BadCredentialsException("Incorrect username or password");
+        }
+
+        UserDetails userDetails = userDetailService.loadUserByUsername(authRequest.getUsername());
+        Optional<Users> users = userRepository.findByUsername(authRequest.getUsername());
+
+        String jwtToken = jwtUtil.generateToken(users.get().getUsername());
+
+        LoginAuthResponse authResponse = new LoginAuthResponse();
+        if (users.isPresent()){
+            authResponse.setId(users.get().getId());
+            authResponse.setJwt(jwtToken);
+            authResponse.setUserRoles(users.get().getUserRoles());
+        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(authResponse);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> forgotPassword(@RequestBody ForgotPasswordRequest forgotPasswordRequest){
+        String token = authService.sendResetToken(forgotPasswordRequest.getEmail());
+        return ResponseEntity.ok(token);
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest resetPasswordRequest){
+        authService.resetPassword(
+                resetPasswordRequest.getEmail(),
+                resetPasswordRequest.getToken(),
+                resetPasswordRequest.getNewPassword()
+        );
+        return ResponseEntity.ok("Password reset successful");
+    }
+
+    @PostMapping("/{userName}/upload-profile-photo")
+    public ResponseEntity<String> uploadProfilePhoto(@PathVariable String userName , @RequestParam("file")MultipartFile file){
+        try{
+            authService.uploadProfilePhoto(userName, file);
+            return ResponseEntity.ok("Profile Photo uploaded successfully");
+        } catch (IOException e) {
+           return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to upload profile photo: " +e.getMessage());
+        }
+    }
+
+    @GetMapping("/{username}/profile-photo")
+    public ResponseEntity<byte[]> getProfilePhoto(@PathVariable(name = "username") String username) {
+        byte[] imageData = authService.getProfilePhoto(username);
+        if (imageData == null) {
+            return ResponseEntity.notFound().build();
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.IMAGE_JPEG); // adjust as needed
+        return new ResponseEntity<>(imageData, headers, HttpStatus.OK);
+    }
+}
+
+5.) CONTROLLER
+-----> AdminController
+@RestController
+@RequestMapping("/api/admin/")
+@CrossOrigin("*")
+public class AdminController {
+
+    @Autowired
+    private AdminService adminService;
+
+    @PostMapping("/add")
+    public ResponseEntity<QuestionDto> addQuestion(@RequestBody CreateQuestionDto dto) {
+        try {
+            QuestionDto createdQuestion = adminService.addQuestion(dto);
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdQuestion);
+        } catch (QuestionCreationException ex) {
+            return ResponseEntity.badRequest().build();
+        } catch (QuestionNotCreatedException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @PostMapping("create")
+    public ResponseEntity<QuizDto> createQuiz(@RequestBody CreateQuizDto dto) {
+        try {
+            QuizDto createdQuiz = adminService.createQuiz(dto);
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdQuiz);
+        } catch (QuizProcessingErrorException ex) {
+            return ResponseEntity.badRequest().build();
+        } catch (UserRoleIncorrectException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @GetMapping("created/{quizTitle}")
+    public ResponseEntity<CreatedQuizDto> getCreatedQuiz(@PathVariable String quizTitle) {
+        try {
+            CreatedQuizDto quiz = adminService.getCreatedQuiz(quizTitle);
+            return ResponseEntity.ok(quiz);
+        } catch (QuizProcessingErrorException ex) {
+            return ResponseEntity.badRequest().build();
+        } catch (UserRoleIncorrectException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @GetMapping("questions/{quizTitle}")
+    public ResponseEntity<CreatorUserDto> getAllQuestionsOfQuiz(@PathVariable String quizTitle) {
+        try {
+            CreatorUserDto creatorUserDto = adminService.getAllQuestionsOfQuiz(quizTitle);
+            return ResponseEntity.ok(creatorUserDto);
+        } catch (QuizProcessingErrorException | QuizNotFoundException ex) {
+            return ResponseEntity.badRequest().build();
+        } catch (UserRoleIncorrectException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @GetMapping("creator/all")
+    public ResponseEntity<List<QuizDto>> getAllQuizByCreator() {
+        try {
+            List<QuizDto> quizzes = adminService.getAllTheQuizByCreator();
+            return ResponseEntity.ok(quizzes);
+        } catch (QuizProcessingErrorException | QuizNotFoundException ex) {
+            return ResponseEntity.badRequest().build();
+        } catch (UserRoleIncorrectException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @GetMapping("quiz/all")
+    public ResponseEntity<List<QuizDto>> getAllQuiz(){
+        try{
+            List<QuizDto> quizzes = adminService.getAllQuiz();
+            return ResponseEntity.ok(quizzes);
+        } catch (QuizProcessingErrorException | QuizNotFoundException ex){
+            return ResponseEntity.badRequest().build();
+        }catch (UserRoleIncorrectException ex){
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    @GetMapping("participant/{quizTitle}")
+    public ResponseEntity<List<QuestionWrapper>> getQuizForParticipant(@PathVariable String quizTitle) {
+        try {
+            List<QuestionWrapper> questions = adminService.gettingCreatedQuizForParticipant(quizTitle);
+            return ResponseEntity.ok(questions);
+        } catch (QuizProcessingErrorException | QuizNotFoundException ex) {
+            return ResponseEntity.badRequest().build();
+        } catch (UserRoleIncorrectException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+    }
+
+    // Response Management Endpoints
+    @PostMapping("responses/submit")
+    public ResponseEntity<List<ResponseEvaluationDto>> submitQuizResponse(@RequestBody QuizTakenResponse response) {
+        try {
+            List<ResponseEvaluationDto> evaluation = adminService.savingResponseResponse(response);
+            return ResponseEntity.ok(evaluation);
+        } catch (QuizNotFoundException ex) {
+            return ResponseEntity.notFound().build();
+        } catch (ResponseNotReceivedException ex) {
+            return ResponseEntity.badRequest().build();
+        } catch (UserRoleIncorrectException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // Result Management Endpoints
+    @GetMapping("results/user/{quizTitle}")
+    public ResponseEntity<ResultDto> getUserResult(@PathVariable String quizTitle) {
+        try {
+            ResultDto result = adminService.getResultForAUser(quizTitle);
+            return ResponseEntity.ok(result);
+        } catch (QuizNotFoundException ex) {
+            return ResponseEntity.notFound().build();
+        } catch (UserRoleIncorrectException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("results/all/{quizTitle}")
+    public ResponseEntity<List<ResultDto>> getAllUsersResults(@PathVariable String quizTitle) {
+        try {
+            List<ResultDto> results = adminService.getResultsForAllUsers(quizTitle);
+            return ResponseEntity.ok(results);
+        } catch (QuizNotFoundException ex) {
+            return ResponseEntity.notFound().build();
+        } catch (UserRoleIncorrectException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (RuntimeException ex) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("getQuiz/{title}")
+    public ResponseEntity<QuizDto> getQuizByQuizTitle(@PathVariable(name = "title") String title){
+        return ResponseEntity.ok(adminService.getQuizByQuizTitle(title));
+    }
+
+    @GetMapping("getQuizTitles")
+    public ResponseEntity<List<String>> getAllQuizTitles(){
+        return ResponseEntity.ok(adminService.getAllQuizTitles());
+    }
+
+    @GetMapping("getTakenQuiz")
+    public ResponseEntity<List<String>> getAllTakenQuizTitles(){
+        return ResponseEntity.ok(adminService.getAllTheQuizForParticipant());
+    }
+
+    @GetMapping("count/category/{category}")
+    public ResponseEntity<Integer> getQuestionCountByCategory(@PathVariable String category){
+        try{
+            int count = adminService.getQuestionCountByCategory(category);
+            return ResponseEntity.ok(count);
+        }catch(Exception ex){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("count/category/{category}/difficulty/{difficultyLevel}")
+    public ResponseEntity<Integer> getQuestionCountByCategoryAndDifficulty(@PathVariable String category , @PathVariable String difficultyLevel){
+        try{
+            int count = adminService.getQuestionByCategoryAndDifficulty(category, difficultyLevel);
+            return ResponseEntity.ok(count);
+        }catch (Exception ex){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("categories")
+    public ResponseEntity<List<String>> getAllCategories(){
+        try{
+            List<String> categories = adminService.getAllCategories();
+            return ResponseEntity.ok(categories);
+        }catch (Exception ex){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("user")
+    public ResponseEntity<UsersDto> getUserDetails(){
+        return ResponseEntity.ok(adminService.getUserDetails());
+    }
+}
+
+
+6.) SERVICES
+-----> AdminService
+@Service
+public class AdminService {
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private QuizRepository quizRepository;
+
+    @Autowired
+    private QuestionRepository questionRepository;
+
+    @Autowired
+    private ResponseRepository responseRepository;
+
+    @Autowired
+    private Mapper mapper;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+//    Actual Functions
+
+//    Adding a question (ADMIN OR CREATOR)
+    public QuestionDto addQuestion(CreateQuestionDto dto) {
+        Users users = jwtUtil.getLoggedInUser();
+        if (userRolesCheckForAdminAndCreator(users)){
+            try{
+                Questions saveQuestion = mapper.toCreateQuestionDto(dto);
+                Questions savedQuestion = questionRepository.save(saveQuestion);
+                return mapper.toQuestionDto(savedQuestion);
+            }catch (QuestionCreationException ex){
+                throw new QuestionCreationException("Question Was Not Created Properly");
+            }
+        }else
+            throw  new QuestionNotCreatedException("Question was not created");
+    }
+
+//    Getting the Creating Quiz (ADMIN OR CREATOR)
+    @Transactional
+    public QuizDto createQuiz(CreateQuizDto dto){
+        Users creator = jwtUtil.getLoggedInUser();
+        if (creator == null) {
+            throw new RuntimeException("Unauthorized or expired token.");
+        }
+
+        Quiz quiz = new Quiz();
+        quiz.setTitle(dto.getQuizTitle());
+        quiz.setCategory(dto.getCategory());
+        quiz.setDifficultyLevel(dto.getDifficultyLevel());
+        quiz.setCreatedBy(creator);
+
+        // Save Quiz to generate ID
+        quiz = quizRepository.saveAndFlush(quiz);
+
+        List<Questions> availableQuestions = questionRepository.findByCategoryAndDifficultyLevel(
+                dto.getCategory(), dto.getDifficultyLevel());
+
+        if (availableQuestions.size() < dto.getNoOfQuestions()) {
+            throw new IllegalArgumentException("Not enough questions available");
+        }
+
+        Collections.shuffle(availableQuestions);
+        List<Questions> selectedQuestions = availableQuestions.subList(0, dto.getNoOfQuestions());
+
+        // 🚨 Use only owning side
+        quiz.setQuestions(selectedQuestions);
+
+        // Save again with questions
+        quiz = quizRepository.saveAndFlush(quiz);
+
+        return mapper.toQuizDto(quiz);
+    }
+
+//  Getting the Created Quiz (ADMIN OR CREATOR)
+public CreatedQuizDto getCreatedQuiz(String quizTitle) {
+    Users users = jwtUtil.getLoggedInUser();
+    if (userRolesCheckForAdminAndCreator(users)){
+        try{
+            Optional<Quiz> optionalQuiz = quizRepository.findQuizByTitle(quizTitle);
+            Quiz quiz = optionalQuiz.get();
+
+            List<Questions> questionsList = quiz.getQuestions();
+
+            CreatedQuizDto createdQuizDto = mapper.toCreatedQuizDto(quiz, questionsList);
+
+            if (quiz.getCreatedBy() != null && quiz.getCreatedBy().getName() != null) {
+                createdQuizDto.setCreatorName(quiz.getCreatedBy().getName());
+            } else {
+                createdQuizDto.setCreatorName("Unknown");
+            }
+
+            return createdQuizDto;
+        }catch (QuizProcessingErrorException ex){
+            throw new QuizProcessingErrorException("Quiz Was Not Created");
+        }
+    }else
+        throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
+}
+
+// Getting all questions of a category (ADMIN OR CREATOR)
+    public List<QuestionDto> getAllQuestionByCategory(String category){
+        Users users = jwtUtil.getLoggedInUser();
+        if (userRolesCheckForAdminAndCreator(users)){
+            try{
+                List<Questions> questionList = questionRepository.findByCategory(category);
+                List<QuestionDto> questionDtoList = new ArrayList<>();
+                for (Questions question : questionList){
+                    questionDtoList.add(mapper.toQuestionDto(question));
+                }
+                return questionDtoList;
+            }catch (QuestionDataInvalidException ex){
+                throw new QuestionDataInvalidException("Question With Specified Category Were Not Found");
+            }
+        }else
+            throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
+    }
+
+//    Getting all the question of a quiz (ADMIN OR CREATOR)
+    public CreatorUserDto getAllQuestionsOfQuiz(String quizTitle){
+        Users users = jwtUtil.getLoggedInUser();
+        if (userRolesCheckForAdminAndCreator(users)){
+            try{
+                Quiz quiz = quizRepository.findQuizByTitle(quizTitle).orElseThrow(() -> new QuizNotFoundException("Quiz With This Title Was Not Found"));
+                CreatorUserDto userDTO = new CreatorUserDto();
+                if (quiz.getCreatedBy().getUsername().equalsIgnoreCase(users.getUsername())){
+                    if (users.getName() != null) {
+                        userDTO.setCreatorName(users.getName());
+                    }else{
+                        userDTO.setCreatorName("Admin");
+                    }
+                    if (users.getUserRoles()==UserRoles.CREATOR) {
+                        userDTO.setUserRoles(UserRoles.CREATOR);
+                    }else{
+                        userDTO.setUserRoles(UserRoles.ADMIN);
+                    }
+
+                    userDTO.setQuestionTitleList(getQuestionTitlesOfQuiz(quiz));
+                }
+                return userDTO;
+            }catch(QuizProcessingErrorException ex){
+                throw new QuizProcessingErrorException("Quiz  With The Given Title Was Not Processed");
+            }
+        }else
+            throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
+    }
+
+//    Getting all quiz by creator name (ADMIN OR CREATOR)
+    public List<QuizDto> getAllTheQuizByCreator(){
+        Users users = jwtUtil.getLoggedInUser();
+        if (userRolesCheckForAdminAndCreator(users)){
+            try{
+                List<Long> quizIdList = getQuizIdsByCreatorName(users.getUsername());
+                List<QuizDto> quizDtoList = new ArrayList<>();
+                for (Long quizId : quizIdList){
+                    Quiz quiz = quizRepository.findQuizById(quizId).orElseThrow(() -> new QuizNotFoundException("Quiz With This Title Was Not Found"));
+                    quizDtoList.add(mapper.toQuizDto(quiz));
+                }
+                return quizDtoList;
+            }catch (QuizProcessingErrorException ex){
+                throw new QuizProcessingErrorException("Quiz  With The Given Title Was Not Processed");
+            }
+        }else
+            throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
+    }
+
+//      Getting all quiz (ADMIN & CREATOR)
+    public List<QuizDto> getAllQuiz(){
+        Users users = jwtUtil.getLoggedInUser();
+        if (userRolesCheckForAdminAndCreator(users)) {
+            try {
+                List<Quiz> quizList = quizRepository.findAll();
+                List<QuizDto> quizDtoList = new ArrayList<>();
+                for (Quiz quiz : quizList) {
+                    quizDtoList.add(mapper.toQuizDto(quiz));
+                }
+
+                return quizDtoList;
+            }catch (QuizProcessingErrorException ex){
+                throw new QuizProcessingErrorException("Quiz were not collected");
+            }
+        }
+        else
+            throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
+    }
+
+//    Getting a created quiz (ADMIN or PARTICIPANT)
+    public List<QuestionWrapper> gettingCreatedQuizForParticipant(String quizTitle){
+        Users users = jwtUtil.getLoggedInUser();
+        if (userRolesCheckForAdminAndParticipant(users)){
+            try{
+                Quiz quiz = quizRepository.findQuizByTitle(quizTitle).orElseThrow(() -> new QuizNotFoundException("Quiz With This Title Was Not Found"));
+                List<Questions> quizQuestions = quiz.getQuestions();
+                List<QuestionWrapper> wrapper = new ArrayList<>();
+                for (Questions quizQuestion : quizQuestions){
+                    wrapper.add(mapper.toQuestionWrapper(quizQuestion));
+                }
+
+                boolean userAlreadyParticipated = quiz.getParticipants().stream()
+                        .anyMatch(participants -> participants != null && participants.getId() != null && participants.getId().equals(users.getId()));
+                if (userAlreadyParticipated){
+                    throw new QuizProcessingErrorException("User has already taken the quiz");
+                }
+                quiz.addParticipant(users);
+                quizRepository.saveAndFlush(quiz);
+                return wrapper;
+            }catch(QuizProcessingErrorException ex){
+                throw new QuizProcessingErrorException("Quiz  With The Given Title Was Not Processed");
+            }
+        }else
+            throw new UserRoleIncorrectException("User Is Not Authorized To Do This");
+    }
+
+
+//    Getting the response from the user after taking quiz and storing it (ADMIN or PARTICIPANT)
+public List<ResponseEvaluationDto> savingResponseResponse(QuizTakenResponse response){
+    Users user = jwtUtil.getLoggedInUser();
+    if (!userRolesCheckForAdminAndParticipant(user)){
+        throw new UserRoleIncorrectException("User is not authorized to do this");
+    }
+
+    try{
+        Quiz quiz = quizRepository.findQuizByTitle(response.getQuizTitle()).orElseThrow(() -> new QuizNotFoundException("Quiz with this title was not found"));
+
+        boolean userIsParticipant = quiz.getParticipants().stream().anyMatch(p -> p != null && p.getId().equals(user.getId()));
+        if (!userIsParticipant){
+            throw new ResponseNotReceivedException("User is not a participant of the quiz");
+        }
+
+        Responses responses = mapper.toResponseEntity(response , quiz , user);
+        responseRepository.save(responses);
+
+        Map<Long , String> correctAnswers = getRightAnswerByQuizTitle(response.getQuizTitle());
+        Map<Long , String> userAnswer = getSelectedAnswerByUserAndQuizTitle(user.getUsername(), response.getQuizTitle());
+        Map<Long , String> questionTitles = quiz.getQuestions().stream()
+                .collect(Collectors.toMap(Questions::getId , Questions::getQuestionTitle));
+
+        List<ResponseEvaluationDto> evaluationList = new ArrayList<>();
+
+        for (Map.Entry<Long , String> entry : userAnswer.entrySet()){
+            Long qId = entry.getKey();
+            String participantAnswer = entry.getValue();
+            String correctAnswer = correctAnswers.get(qId);
+            String questionTitle = questionTitles.get(qId);
+
+            ResponseEvaluationDto dto = new ResponseEvaluationDto();
+            dto.setQuestionTitle(questionTitle);
+            dto.setCorrectAnswer(correctAnswer);
+            dto.setParticipantAnswer(participantAnswer);
+            evaluationList.add(dto);
+        }
+
+        return evaluationList;
+
+    }catch (QuizNotFoundException | ResponseNotReceivedException ex){
+        throw ex;
+    }catch (Exception ex){
+        throw new RuntimeException("Error while saving and evaluating quiz response " , ex);
+    }
+}
+
+    //  Getting all the quiz a Participant Has Taken (ADMIN or CREATOR)
+    public List<String> getAllTheQuizForParticipant(){
+        Users users = jwtUtil.getLoggedInUser();
+        if (!userRolesCheckForAdminAndCreator(users)){
+            throw new UserRoleIncorrectException("User is not authorized to do this");
+        }
+
+        List<Quiz> quizTakenTitle = quizRepository.findQuizzesByParticipantName(users.getName());
+        List<String> quizTitleList = new ArrayList<>();
+
+        for (Quiz list : quizTakenTitle){
+            quizTitleList.add(list.getTitle());
+        }
+        return quizTitleList;
+    }
+
+// Getting proper result for the LoggedIn User (ADMIN or PARTICIPANT);
+    public ResultDto getResultForAUser(String quizTitle){
+        Users user = jwtUtil.getLoggedInUser();
+        if (!userRolesCheckForAdminAndParticipant(user)){
+            throw new UserRoleIncorrectException("User is not authorized to do this");
+        }
+        Optional<Quiz> quizOptional = quizRepository.findQuizByTitle(quizTitle);
+        if (quizOptional.isEmpty()) {
+            throw new QuizNotFoundException("Quiz with title '" + quizTitle + "' not found");
+        }
+
+        Quiz quiz = quizOptional.get();
+        boolean isParticipant = quiz.getParticipants().stream().anyMatch(p -> p.getId().equals(user.getId()));
+
+        if (!isParticipant){
+            throw new RuntimeException("User did not participate in this quiz");
+        }
+
+        Map<String , Integer> evaluation = evaluateUserAnswers(quizTitle , user.getUsername());
+
+        int correct = evaluation.getOrDefault("correct" , 0);
+        int wrong = evaluation.getOrDefault("wrong" , 0);
+        int unanswered = evaluation.getOrDefault("unanswered" , 0);
+
+        int totalQuestions = quiz.getQuestions() != null ? quiz.getQuestions().size() : 0;
+        double percentage = totalQuestions == 0 ? 0.0 : ((double) correct/totalQuestions) * 100;
+
+        ResultDto result = new ResultDto();
+        result.setQuizId(quiz.getId());
+        result.setQuizTitle(quiz.getTitle());
+        result.setUserId(user.getId());
+        result.setUserName(user.getName());
+        result.setTotalQuestions(totalQuestions);
+        result.setCorrectAnswer(correct);
+        result.setIncorrectAnswer(wrong + unanswered);
+        result.setPercentage(percentage);
+
+        return result;
+    }
+
+//    Getting the result of all the participants that have taken the quiz (ADMIN or CREATOR)
+    public List<ResultDto> getResultsForAllUsers(String quizTitle){
+
+        Users user = jwtUtil.getLoggedInUser();
+        if (!userRolesCheckForAdminAndCreator(user)){
+            throw new UserRoleIncorrectException("User is not authorized to do this");
+        }
+
+        Quiz quiz = quizRepository.findQuizByTitle(quizTitle)
+                .orElseThrow(() -> new QuizNotFoundException("Quiz with title '" + quizTitle + "' not found"));
+
+        List<Responses> allResponses = responseRepository.findByQuizId(quiz.getId());
+
+        if (allResponses.isEmpty()){
+            throw new RuntimeException("No participant has attempted the quiz yet.");
+        }
+
+        Map<Long , String> correctAnswerMap = quiz.getQuestions().stream()
+                .collect(Collectors.toMap(Questions::getId , Questions::getRightAnswer));
+
+        int totalQuestions = correctAnswerMap.size();
+
+        List<ResultDto> resultList = new ArrayList<>();
+        for (Responses responses : allResponses){
+            Users users = responses.getUser();
+            List<Long> questionIds = responses.getQuestionId();
+            List<String> selectedAnswers = responses.getSelectedAnswer();
+            int correct = 0;
+            int incorrect = 0;
+
+            for (int i = 0 ; i < questionIds.size() ; i++) {
+                Long qId = questionIds.get(i);
+                String selected = selectedAnswers.size() > i ? selectedAnswers.get(i) : null;
+                String correctAnswer = correctAnswerMap.get(qId);
+
+                if (selected != null && selected.equalsIgnoreCase(correctAnswer)) {
+                    correct++;
+                } else {
+                    incorrect++;
+                }
+            }
+                double percentage = totalQuestions == 0 ? 0.0 : ((double) correct / totalQuestions) * 100;
+
+                ResultDto result = new ResultDto();
+                result.setQuizId(quiz.getId());
+                result.setQuizTitle(quiz.getTitle());
+                result.setUserId(user.getId());
+                result.setUserName(user.getName());
+                result.setTotalQuestions(totalQuestions);
+                result.setCorrectAnswer(correct);
+                result.setIncorrectAnswer(incorrect);
+                result.setPercentage(percentage);
+
+                resultList.add(result);
+            }
+            return resultList;
+    }
+
+// Frontend Helper Function
+    public QuizDto getQuizByQuizTitle(String quizTitle){
+        Quiz quiz = quizRepository.findQuizByTitle(quizTitle).orElseThrow(() -> new RuntimeException("Quiz with title " +quizTitle+ "was not found"));
+
+        return mapper.toQuizDto(quiz);
+    }
+
+    public List<String> getAllQuizTitles(){
+        List<String> quizTitles = quizRepository.findAll().stream().map(Quiz::getTitle).toList();
+
+        return quizTitles;
+    }
+
+
+    public int getQuestionCountByCategory(String category){
+        List<Questions> questions = questionRepository.findByCategory(category);
+        return questions.size();
+    }
+
+    public int getQuestionByCategoryAndDifficulty(String category , String difficultyLevel){
+        return questionRepository.countByCategoryAndDifficulty(category, difficultyLevel);
+    }
+
+    public List<String> getAllCategories(){
+        List<Questions> allQuestions = questionRepository.findAll();
+        return allQuestions.stream()
+                .map(Questions::getCategory)
+                .filter(category -> category != null && !category.trim().isEmpty())
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    public UsersDto getUserDetails(){
+        return mapper.mapFromUserToUserDTO(jwtUtil.getLoggedInUser());
+    }
+
+//    Helper Functions
+
+    public List<Questions> selectRandomQuestions(List<Questions> availableQuestions, int noOfQuestions) {
+        List<Questions> questionsCopy = new ArrayList<>(availableQuestions);
+        List<Questions> selectedQuestions = new ArrayList<>();
+
+        Random random = new Random();
+
+        for (int i = 0; i < noOfQuestions; i++) {
+            int randomIndex = random.nextInt(questionsCopy.size());
+            selectedQuestions.add(questionsCopy.get(randomIndex));
+            questionsCopy.remove(randomIndex);
+        }
+        return selectedQuestions;
+    }
+
+    public List<String> getQuestionTitlesOfQuiz(Quiz quiz) {
+        if (quiz.getQuestions() == null || quiz.getQuestions().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return quiz.getQuestions().stream()
+                .map(Questions::getQuestionTitle)
+                .collect(Collectors.toList());
+    }
+
+    public List<Long> getQuestionIdsOfQuiz(Quiz quiz) {
+        if (quiz.getQuestions() == null) return Collections.emptyList();
+
+        return quiz.getQuestions().stream()
+                .map(Questions::getId)
+                .collect(Collectors.toList());
+    }
+
+    public List<Long> getQuizIdsByCreatorName(String creatorName){
+        List<Quiz> quizzes = quizRepository.findAllQuizCreatedByUser(creatorName);
+
+        return quizzes.stream().map(Quiz :: getId).collect(Collectors.toList());
+    }
+
+    public List<String> getParticipantNameByQuizTitle(String quizTitle){
+        Optional<Quiz> quizOptional = quizRepository.findQuizByTitle(quizTitle);
+
+        if (quizOptional.isEmpty() || quizOptional.get().getParticipants() == null){
+            return Collections.emptyList();
+        }
+
+        return quizOptional.get().getParticipants().stream().map(Users::getName).collect(Collectors.toList());
+    }
+
+    public List<Long> getParticipantIdsByQuizTitle(String quizTitle){
+        Optional<Quiz> quizOptional = quizRepository.findQuizByTitle(quizTitle);
+
+        if (quizOptional.isEmpty() || quizOptional.get().getParticipants() == null){
+            return Collections.emptyList();
+        }
+        return quizOptional.get().getParticipants().stream().map(Users::getId).collect(Collectors.toList());
+    }
+
+    public Map<Long , String> getRightAnswerByQuizTitle(String title){
+        return quizRepository.findQuizByTitle(title)
+                .map(quiz -> quiz
+                        .getQuestions()
+                        .stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toMap(Questions :: getId , Questions :: getRightAnswer)))
+                .orElse(Collections.emptyMap());
+    }
+
+    public Map<Long , String> getSelectedAnswerByUserAndQuizTitle(String userName , String quizTitle){
+        List<Responses> responses = responseRepository.findResponseByUserAndQuizTitle(userName , quizTitle);
+        Map<Long , String> selectedMap = new LinkedHashMap<>();
+        for (Responses response : responses){
+            List<Long> questionIds = response.getQuestionId();
+            List<String> selectedAnswers = response.getSelectedAnswer();
+
+            for (int i = 0 ; i < questionIds.size() ; i++){
+                selectedMap.put(questionIds.get(i) , selectedAnswers.get(i));
+            }
+        }
+
+        return selectedMap;
+    }
+
+    public List<String> getAnsweredQuestionTitleFromQuiz(String userName , String quizTitle){
+        Optional<Quiz> quizOpt = quizRepository.findQuizByTitle(quizTitle);
+        if (quizOpt.isEmpty()) return Collections.emptyList();
+
+        Quiz quiz = quizOpt.get();
+
+        List<Long> quizQuestionIds = quiz.getQuestions().stream().map(Questions::getId).toList();
+
+        List<Responses> responses = responseRepository.findResponseByUserAndQuizTitle(userName, quizTitle);
+
+        Set<Long> answerQuestions = responses.stream()
+                .flatMap(r -> r.getQuestionId().stream())
+                .filter(quizQuestionIds::contains)
+                .collect(Collectors.toSet());
+
+        return quiz.getQuestions()
+                .stream()
+                .filter(q -> answerQuestions.contains(q.getId()))
+                .map(Questions::getQuestionTitle)
+                .collect(Collectors.toList());
+    }
+
+    public List<QuestionDto> getAnsweredQuestionDtoFromQuiz(String userName, String quizTitle) {
+        Optional<Quiz> quizOpt = quizRepository.findQuizByTitle(quizTitle);
+        if (quizOpt.isEmpty()) return Collections.emptyList();
+
+        Quiz quiz = quizOpt.get();
+
+        List<Long> quizQuestionIds = quiz.getQuestions().stream()
+                .map(Questions::getId)
+                .collect(Collectors.toList());
+
+        List<Responses> responses = responseRepository.findResponseByUserAndQuizTitle(userName, quizTitle);
+
+        Set<Long> answerQuestionIds = responses.stream()
+                .flatMap(r -> r.getQuestionId().stream())
+                .filter(quizQuestionIds :: contains)
+                .collect(Collectors.toSet());
+
+        return quiz.getQuestions().stream()
+                .filter(q -> answerQuestionIds.contains(q.getId()))
+                .map(q ->mapper.toQuestionDto(q))
+                .collect(Collectors.toList());
+    }
+
+    public Map<String , Integer> evaluateUserAnswers(String quizTitle , String userName){
+        Optional<Quiz> quizOptional = quizRepository.findQuizByTitle(quizTitle);
+
+        if (quizOptional.isEmpty()) throw new QuizNotFoundException("Quiz With This Title :" + quizTitle + "Not Found");
+
+        Quiz quiz = quizOptional.get();
+
+        List<Responses> responses = responseRepository.findResponseByUserAndQuizTitle(quizTitle, userName);
+        if (responses.isEmpty()) {
+            throw new RuntimeException("No responses found for user: " + userName + " on quiz: " + quizTitle);
+        }
+
+        List<Long> userQuestionIds = new ArrayList<>();
+        List<String> userSelectedAnswers = new ArrayList<>();
+        for (Responses response : responses){
+            userQuestionIds.addAll(response.getQuestionId());
+            userSelectedAnswers.addAll(response.getSelectedAnswer());
+        }
+
+        Map<Long , String> correctAnswerMap = quiz
+                .getQuestions()
+                .stream()
+                .collect(Collectors.toMap(Questions::getId , Questions::getRightAnswer));
+
+        int correct = 0;
+        int wrong = 0;
+        int unanswered = 0;
+
+        for (int i = 0 ; i < userQuestionIds.size() ; i++){
+            Long qId = userQuestionIds.get(i);
+            String userAnswer = i < userSelectedAnswers.size() ? userSelectedAnswers.get(i) : null;
+            String correctAnswer = correctAnswerMap.get(qId);
+
+            if (userAnswer == null || userAnswer.trim().isEmpty()){
+                unanswered++;
+            } else if (userAnswer.equalsIgnoreCase(correctAnswer)) {
+                correct++;
+            }else {
+                wrong++;
+            }
+        }
+
+        Map<String , Integer> result = new HashMap<>();
+        result.put("correct" , correct);
+        result.put("wrong" , wrong);
+        result.put("unanswered" , unanswered);
+
+        return result;
+    }
+
+    public boolean userRolesCheckForAdminAndCreator(Users users){
+        return users.getUserRoles().equals(UserRoles.ADMIN) || users.getUserRoles().equals(UserRoles.CREATOR);
+    }
+
+    public boolean userRolesCheckForAdminAndParticipant(Users users){
+        return users.getUserRoles().equals(UserRoles.ADMIN) || users.getUserRoles().equals(UserRoles.CREATOR);
+    }
+}
+
+
+

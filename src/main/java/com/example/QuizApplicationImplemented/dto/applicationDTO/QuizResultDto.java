@@ -1,27 +1,28 @@
 package com.example.QuizApplicationImplemented.dto.applicationDTO;
 
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.cglib.core.Local;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class ResultDto {
+public class QuizResultDto {
 
-    private Long quizResultId;
+    private Long id;
+    private Long userId;
+    private String username;
     private Long quizId;
     private String quizTitle;
-    private Long userId;
-    private String userName;
     private Integer totalQuestions;
     private Integer correctAnswer;
     private Integer wrongAnswer;
     private Double scorePercentage;
     private LocalDateTime completeAt;
+    private List<Long> questionIds;
+    private List<String> selectedAnswers;
 
 }
